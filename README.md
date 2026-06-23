@@ -16,7 +16,7 @@ Root cause chain (diagnosed from system logs):
 
 | Agent | Trigger | Action |
 |---|---|---|
-| `memory_watchdog` | Every 15 min | Probes `~/pCloud Drive` with 5s timeout. If hung → restart pCloud Drive only |
+| `memory_watchdog` | Every 15 min | Probes `~/pCloud Drive` with 20s timeout, two attempts. If both fail → restart pCloud Drive only |
 | `nightly_refresh` | 04:20 every night | Restart Dock + pCloud Drive to clear accumulated memory leaks |
 
 **Finder is never restarted automatically** — that would lose your Finder session.
@@ -57,7 +57,13 @@ Log files are local only and not tracked in this repo.
 
 ## Rebuild with AI
 
-See [PROMPT.md](PROMPT.md) for a complete prompt you can paste into GitHub Copilot or any AI assistant to rebuild this setup from scratch, even without this repo.
+Open GitHub Copilot Chat in **Agent mode** and run:
+
+```
+/rebuild_mac_guard
+```
+
+This prompt (`​.github/prompts/rebuild_mac_guard.prompt.md`) checks the current state, clones the repo if needed, runs `setup.sh`, and verifies both launchd agents are loaded — no manual steps required.
 
 ## Why scripts are in `~/Library/Scripts/` not `~/Downloads/`
 

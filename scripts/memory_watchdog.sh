@@ -25,14 +25,23 @@ if (( ELAPSED < COOLDOWN )); then
   exit 0
 fi
 
-# --- Probe: can we list the pCloud Drive mount within 5 seconds?
-if timeout 5 ls "$PCLOUD_MOUNT" > /dev/null 2>&1; then
+# --- Probe: can we list the pCloud Drive mount within 20 seconds?
+if timeout 20 ls "$PCLOUD_MOUNT" > /dev/null 2>&1; then
   # pCloud is responding normally — do nothing, no log noise
   exit 0
 fi
 
-# --- pCloud did not respond in time — it is frozen or unmounted
-log "pCloud Drive probe timed out or failed — restarting"
+# --- First probe failed — wait 5s and retry before declaring frozen
+log "pCloud Drive probe 1 timed out — retrying in 5s"
+sleep 5
+
+if timeout 20 ls "$PCLOUD_MOUNT" > /dev/null 2>&1; then
+  log "pCloud Drive probe 2 OK — transient slowness, no restart needed"
+  exit 0
+fi
+
+# --- Both probes failed — pCloud is frozen or unmounted
+log "pCloud Drive both probes timed out — restarting"
 
 osascript -e 'tell application "pCloud Drive" to quit' 2>/dev/null || true
 sleep 4
