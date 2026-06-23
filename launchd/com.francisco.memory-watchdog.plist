@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.francisco.memory-watchdog</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>/Users/francisco/Library/Scripts/freeze_guard/memory_watchdog.sh</string>
+    </array>
+
+    <!-- Run every 15 minutes -->
+    <key>StartInterval</key>
+    <integer>900</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/francisco/Library/Logs/freeze_guard/watchdog_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/francisco/Library/Logs/freeze_guard/watchdog_stderr.log</string>
+  </dict>
+</plist>

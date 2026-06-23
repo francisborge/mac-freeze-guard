@@ -1,0 +1,4 @@
+# Log files — local only, never committed
+*.log
+nightly_status_*.txt
+.watchdog_state
