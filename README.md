@@ -1,6 +1,6 @@
 # mac-freeze-guard
 
-Prevents **Finder + pCloud Drive freeze** on macOS with multi-monitor setups and high RAM usage. Two launchd agents: a 15-minute watchdog that detects and recovers a frozen pCloud filesystem, and a nightly refresh that restarts Dock + pCloud Drive to clear memory leaks.
+Prevents **Finder + pCloud Drive freeze** on macOS with multi-monitor setups and high RAM usage. Two launchd agents: a 15-minute watchdog that detects a crashed pCloud process and relaunches it, and a nightly refresh that restarts Dock + pCloud Drive to clear memory leaks.
 
 ## The problem
 
@@ -16,7 +16,7 @@ Root cause chain (diagnosed from system logs):
 
 | Agent | Trigger | Action |
 |---|---|---|
-| `memory_watchdog` | Every 15 min | Probes `~/pCloud Drive` with 20s `stat` timeout, two attempts. If both fail → restart pCloud Drive only |
+| `memory_watchdog` | Every 15 min | Checks if pCloud Drive process is running. If crashed → kill any remnant + relaunch. No filesystem probe (FUSE blocks during sync, causing false Finder resets) |
 | `nightly_refresh` | 04:20 every night | Restart Dock + pCloud Drive to clear accumulated memory leaks |
 
 **Finder is never restarted automatically** — that would lose your Finder session.
@@ -63,7 +63,7 @@ Open GitHub Copilot Chat in **Agent mode** and run:
 /rebuild_mac_guard
 ```
 
-This prompt (`​.github/prompts/rebuild_mac_guard.prompt.md`) checks the current state, clones the repo if needed, runs `setup.sh`, and verifies both launchd agents are loaded — no manual steps required.
+This prompt (`.github/prompts/rebuild_mac_guard.prompt.md`) checks the current state, clones the repo if needed, runs `setup.sh`, and verifies both launchd agents are loaded — no manual steps required.
 
 ## Why scripts are in `~/Library/Scripts/` not `~/Downloads/`
 

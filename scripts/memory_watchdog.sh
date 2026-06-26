@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # memory_watchdog.sh — Runs every 15 minutes via launchd.
-# Probes whether pCloud Drive's filesystem is responding.
-# Only restarts pCloud if it is actually frozen — never based on RAM alone.
-# This avoids unnecessary restarts that would lose your Finder session.
+# Checks whether the pCloud Drive process is running.
+# Restarts it (kill then relaunch) only if the process is gone.
+# Does NOT probe the filesystem — FUSE stat/ls blocks during normal sync,
+# causing false positives that reset Finder's session.
 
 LOG_DIR="$HOME/Library/Logs/freeze_guard"
 mkdir -p "$LOG_DIR"
@@ -11,56 +12,34 @@ STATE_FILE="$LOG_DIR/.watchdog_state"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE" 2>&1; }
 
-PCLOUD_MOUNT="$HOME/pCloud Drive"
+# --- Check if pCloud Drive process is running
+if pgrep -f "pCloud Drive" > /dev/null 2>&1; then
+  # Process is alive — do nothing, no log noise
+  exit 0
+fi
 
-# --- Cooldown check: skip if pCloud was restarted less than 5 minutes ago
+# --- Process not found — pCloud has crashed
+NOW=$(date +%s)
+
+# Cooldown: skip if we restarted less than 5 minutes ago
 LAST_ACTION=0
 [[ -f "$STATE_FILE" ]] && LAST_ACTION=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
-NOW=$(date +%s)
-ELAPSED=$(( NOW - LAST_ACTION ))
 COOLDOWN=300  # 5 minutes
 
-if (( ELAPSED < COOLDOWN )); then
-  # Still within cooldown after last restart — skip probe, exit silently
+if (( NOW - LAST_ACTION < COOLDOWN )); then
   exit 0
 fi
 
-# --- Probe: stat the pCloud Drive mount (inode-only check, no directory listing)
-if timeout 20 stat "$PCLOUD_MOUNT" > /dev/null 2>&1; then
-  # pCloud is responding normally — do nothing, no log noise
-  exit 0
-fi
+log "pCloud Drive process not found — restarting"
 
-# --- First probe failed — wait 5s and retry before declaring frozen
-log "pCloud Drive probe 1 timed out — retrying in 5s"
-sleep 5
-
-if timeout 20 stat "$PCLOUD_MOUNT" > /dev/null 2>&1; then
-  log "pCloud Drive probe 2 OK — transient slowness, no restart needed"
-  exit 0
-fi
-
-# --- Both probes failed — pCloud is frozen or unmounted
-# Only restart when the user is idle — pCloud restart reloads pCloudFinderExt,
-# which resets Finder's session. Deferring protects active work.
-IDLE_SECS=$(ioreg -c IOHIDSystem 2>/dev/null | awk '/HIDIdleTime/{printf "%.0f", $NF/1000000000; exit}')
-IDLE_SECS=${IDLE_SECS:-0}   # default 0 (assume active) if detection fails
-IDLE_THRESHOLD=600           # 10 minutes
-
-if (( IDLE_SECS < IDLE_THRESHOLD )); then
-  log "pCloud frozen but user active (idle ${IDLE_SECS}s) — deferring restart"
-  exit 0
-fi
-
-log "pCloud Drive both probes timed out — user idle ${IDLE_SECS}s — restarting"
-
+# Always kill any remnant before relaunching (handles hung/zombie processes)
 osascript -e 'tell application "pCloud Drive" to quit' 2>/dev/null || true
-sleep 4
+sleep 3
 pkill -9 -f "pCloud Drive" 2>/dev/null || true
 sleep 2
 open -a "pCloud Drive" 2>/dev/null || true
 
-log "pCloud Drive restarted — cooldown starts now (${COOLDOWN}s)"
+log "pCloud Drive relaunched — cooldown starts now (${COOLDOWN}s)"
 echo "$NOW" > "$STATE_FILE"
 
 # --- Rotate log if > 200KB
