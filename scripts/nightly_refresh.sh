@@ -4,7 +4,7 @@
 # Finder is intentionally NOT restarted — this preserves your Finder session.
 # Lives in ~/Library/Scripts/freeze_guard/ — accessible by launchd without TCC issues.
 
-LOG_DIR="$HOME/Downloads/mac_freeze_fix"
+LOG_DIR="$HOME/Library/Logs/freeze_guard"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/nightly_refresh.log"
 

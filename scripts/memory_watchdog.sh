@@ -4,7 +4,7 @@
 # Only restarts pCloud if it is actually frozen — never based on RAM alone.
 # This avoids unnecessary restarts that would lose your Finder session.
 
-LOG_DIR="$HOME/Downloads/mac_freeze_fix"
+LOG_DIR="$HOME/Library/Logs/freeze_guard"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/memory_watchdog.log"
 STATE_FILE="$LOG_DIR/.watchdog_state"
@@ -25,8 +25,8 @@ if (( ELAPSED < COOLDOWN )); then
   exit 0
 fi
 
-# --- Probe: can we list the pCloud Drive mount within 20 seconds?
-if timeout 20 ls "$PCLOUD_MOUNT" > /dev/null 2>&1; then
+# --- Probe: stat the pCloud Drive mount (inode-only check, no directory listing)
+if timeout 20 stat "$PCLOUD_MOUNT" > /dev/null 2>&1; then
   # pCloud is responding normally — do nothing, no log noise
   exit 0
 fi
@@ -35,13 +35,24 @@ fi
 log "pCloud Drive probe 1 timed out — retrying in 5s"
 sleep 5
 
-if timeout 20 ls "$PCLOUD_MOUNT" > /dev/null 2>&1; then
+if timeout 20 stat "$PCLOUD_MOUNT" > /dev/null 2>&1; then
   log "pCloud Drive probe 2 OK — transient slowness, no restart needed"
   exit 0
 fi
 
 # --- Both probes failed — pCloud is frozen or unmounted
-log "pCloud Drive both probes timed out — restarting"
+# Only restart when the user is idle — pCloud restart reloads pCloudFinderExt,
+# which resets Finder's session. Deferring protects active work.
+IDLE_SECS=$(ioreg -c IOHIDSystem 2>/dev/null | awk '/HIDIdleTime/{printf "%.0f", $NF/1000000000; exit}')
+IDLE_SECS=${IDLE_SECS:-0}   # default 0 (assume active) if detection fails
+IDLE_THRESHOLD=600           # 10 minutes
+
+if (( IDLE_SECS < IDLE_THRESHOLD )); then
+  log "pCloud frozen but user active (idle ${IDLE_SECS}s) — deferring restart"
+  exit 0
+fi
+
+log "pCloud Drive both probes timed out — user idle ${IDLE_SECS}s — restarting"
 
 osascript -e 'tell application "pCloud Drive" to quit' 2>/dev/null || true
 sleep 4

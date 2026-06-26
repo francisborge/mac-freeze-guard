@@ -16,7 +16,7 @@ Root cause chain (diagnosed from system logs):
 
 | Agent | Trigger | Action |
 |---|---|---|
-| `memory_watchdog` | Every 15 min | Probes `~/pCloud Drive` with 20s timeout, two attempts. If both fail → restart pCloud Drive only |
+| `memory_watchdog` | Every 15 min | Probes `~/pCloud Drive` with 20s `stat` timeout, two attempts. If both fail → restart pCloud Drive only |
 | `nightly_refresh` | 04:20 every night | Restart Dock + pCloud Drive to clear accumulated memory leaks |
 
 **Finder is never restarted automatically** — that would lose your Finder session.
@@ -49,8 +49,8 @@ Expected output:
 | Nightly script | `~/Library/Scripts/freeze_guard/nightly_refresh.sh` |
 | Watchdog plist | `~/Library/LaunchAgents/com.francisco.memory-watchdog.plist` |
 | Nightly plist | `~/Library/LaunchAgents/com.francisco.nightly-refresh.plist` |
-| Watchdog log | `~/Downloads/mac_freeze_fix/memory_watchdog.log` |
-| Nightly log | `~/Downloads/mac_freeze_fix/nightly_refresh.log` |
+| Watchdog log | `~/Library/Logs/freeze_guard/memory_watchdog.log` |
+| Nightly log | `~/Library/Logs/freeze_guard/nightly_refresh.log` |
 | launchd stdout/err | `~/Library/Logs/freeze_guard/` |
 
 Log files are local only and not tracked in this repo.
