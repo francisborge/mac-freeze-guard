@@ -46,4 +46,12 @@ SNAP="$LOG_DIR/nightly_status_$TS.txt"
   top -l 1 -o rsize -n 10 | tail -12
 } > "$SNAP"
 log "Snapshot saved: $SNAP"
+
+# --- 4. Prune old snapshots (30-day retention)
+# One snapshot per run and nothing ever removed them: 62 files by 26.08, growing
+# ~3.6 KB/day without bound. They are not redundant — each is a distinct daily
+# capture — so the set is bounded rather than dropped. Mirrors the 200 KB
+# rotation memory_watchdog.sh already does for its own log.
+find "$LOG_DIR" -name 'nightly_status_*.txt' -mtime +30 -delete 2>/dev/null
+log "Snapshots pruned (30d retention; $(ls "$LOG_DIR"/nightly_status_*.txt 2>/dev/null | wc -l | tr -d ' ') kept)"
 log "=== Nightly refresh END ==="

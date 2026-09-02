@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.francisco.weekly-reboot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>/Users/francisco/Library/Scripts/freeze_guard/weekly_reboot.sh</string>
+    </array>
+
+    <!-- Sunday 03:00 (Weekday 0 = Sunday), before the 04:20 nightly refresh -->
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Weekday</key>
+      <integer>0</integer>
+      <key>Hour</key>
+      <integer>3</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/francisco/Library/Logs/freeze_guard/reboot_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/francisco/Library/Logs/freeze_guard/reboot_stderr.log</string>
+  </dict>
+</plist>

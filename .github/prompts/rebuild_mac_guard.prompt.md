@@ -1,8 +1,9 @@
 ---
 description: >
-  Rebuild the mac-freeze-guard setup from scratch — two launchd agents (memory watchdog
-  every 15 min + nightly refresh at 04:20) that prevent Finder/pCloud Drive freezes on
-  Apple Silicon Macs under high RAM pressure. Use this when recovering after a system
+  Rebuild the mac-freeze-guard setup from scratch — four launchd agents (memory watchdog
+  every 15 min, memory-pressure watchdog every 5 min, nightly refresh at 04:20, weekly
+  reboot Sunday 03:00) that prevent Finder/pCloud Drive freezes and total-system freezes on
+  Apple Silicon Macs under high RAM/uptime pressure. Use this when recovering after a system
   failure or fresh macOS install, or to verify the current setup matches the spec.
 agent: agent
 ---
@@ -13,15 +14,16 @@ You are a macOS systems engineer. Rebuild or verify the mac-freeze-guard launchd
 
 ## Context
 
-My Mac (Apple M5 Pro, 24 GB RAM, macOS Sequoia/Sonoma, 3 displays: built-in Retina + 2× Dell 4K external) experiences partial freezes where **Finder and pCloud Drive become unresponsive**, typically after 17:00 during afternoon work sessions.
+My Mac (Apple M5 Pro, 24 GB RAM, macOS Sequoia/Sonoma, 3 displays: built-in Retina + 2× Dell 4K external) experiences freezes ranging from partial (**Finder and pCloud Drive unresponsive**) to total system freezes requiring a hard reboot, typically after several days of uptime.
 
-**Root cause (already diagnosed):**
-1. System runs near 100% RAM. WindowServer leaks 1 GB+ after multi-day uptime with 3 monitors; Chrome + VS Code + Outlook + WhatsApp all open simultaneously.
-2. pCloud Drive uses a FUSE-based kernel filesystem. Under memory pressure the pCloud daemon stalls, holding kernel VFS locks — Finder deadlocks waiting for filesystem responses.
-3. Both pCloud and Finder appear completely frozen. Only fix was manual force-quit.
+**Root cause (diagnosed from system logs, most recently the Sep 1 2026 freeze):**
+1. Uptime climbs for days without a reboot (13 days measured before the Sep 1 freeze) while swap I/O and the memory compressor grow (~10GB compressed, ~200MB free RAM at the last healthy snapshot).
+2. A memory-heavy background app left running continuously adds several more GB of resident memory.
+3. Memory hits Critical Pressure. pCloud Drive's FUSE-based kernel filesystem can stall under this pressure, holding kernel VFS locks — Finder deadlocks waiting for filesystem responses. Under severe enough pressure the whole system stops responding, including this project's own watchdog scripts, and only a hard reboot recovers it.
+4. A watchdog that only checks whether the pCloud process is running (`pgrep`) cannot catch a hung-but-alive process — it must also probe the filesystem, confirmed across 2 consecutive checks to avoid false positives from normal sync stalls.
 
 **Critical deployment constraint:**
-Scripts must live in `~/Library/Scripts/freeze_guard/`, NOT `~/Downloads/`. macOS TCC prevents launchd agents from executing scripts in `~/Downloads/`. `StandardOutPath`/`StandardErrorPath` must point to `~/Library/Logs/freeze_guard/` — launchd exits with code 78 if it cannot create or open log files there.
+Scripts must live in `~/Library/Scripts/freeze_guard/`, NOT `~/Downloads/`. macOS TCC prevents launchd agents from executing scripts in `~/Downloads/`. `StandardOutPath`/`StandardErrorPath` must point to `~/Library/Logs/freeze_guard/` — launchd exits with code 78 if it cannot create or open log files there. All script logs and status snapshots also live under `~/Library/Logs/freeze_guard/` — there is no other log location for this project.
 
 ---
 
@@ -50,15 +52,18 @@ Then proceed with the full setup.
 
 ## Step 2 — Locate repo
 
-Check if the repo is already cloned:
+Check if the repo is already cloned (the canonical location syncs via pCloud Drive):
 
 ```bash
-ls ~/mac-freeze-guard/setup.sh 2>/dev/null || ls ~/Projects/mac-freeze-guard/setup.sh 2>/dev/null || echo "Repo not found"
+ls "$HOME/pCloud Drive/Hochschule Luzern/HSLU/projects/mac-freeze-guard/setup.sh" 2>/dev/null || \
+  ls ~/mac-freeze-guard/setup.sh 2>/dev/null || \
+  ls ~/Projects/mac-freeze-guard/setup.sh 2>/dev/null || \
+  echo "Repo not found"
 ```
 
-If the repo is found at either path, use that path for `cd` in Step 3. If found at neither path, clone to `~/mac-freeze-guard/`. Do not re-clone if already present at any location.
+If the repo is found at any path, use that path for `cd` in Step 3. Do not re-clone if already present at any location.
 
-If not found, clone it:
+If not found, clone it (prefer cloning under the pCloud Drive folder so it syncs across machines):
 
 ```bash
 git clone https://github.com/francisborge/mac-freeze-guard.git ~/mac-freeze-guard
@@ -79,10 +84,10 @@ bash setup.sh
 If setup.sh exits with a non-zero code, print the full terminal output and stop. Do not proceed to Step 4 until setup.sh completes successfully.
 
 `setup.sh` will:
-- Create `~/Library/Scripts/freeze_guard/` and copy the two scripts
+- Create `~/Library/Scripts/freeze_guard/` and copy all four scripts
 - Create `~/Library/Logs/freeze_guard/` and pre-create log files with `touch`
-- Copy plists to `~/Library/LaunchAgents/`
-- Load both agents with `launchctl load`
+- Copy all four plists to `~/Library/LaunchAgents/`
+- Load all four agents with `launchctl load`
 
 After `launchctl load`, immediately run `launchctl list | grep 'com.francisco'`. If an agent is absent, run `plutil -lint ~/Library/LaunchAgents/com.francisco.<name>.plist` to check for plist errors and report the result.
 
@@ -110,8 +115,8 @@ launchctl list | grep 'com.francisco'
 If exit code is non-zero, check:
 
 ```bash
-cat ~/Library/Logs/freeze_guard/memory_watchdog_stdout.log
-cat ~/Library/Logs/freeze_guard/memory_watchdog_stderr.log
+cat ~/Library/Logs/freeze_guard/watchdog_stdout.log
+cat ~/Library/Logs/freeze_guard/watchdog_stderr.log
 ```
 
 If the stderr log contains `No such file or directory` for the script path, the scripts were not copied correctly — re-run setup.sh. If it contains `Permission denied`, run `chmod +x ~/Library/Scripts/freeze_guard/memory_watchdog.sh` and retry. If the error is unrecognized, paste the full log content and stop for user input.
@@ -133,7 +138,7 @@ bash ~/Library/Scripts/freeze_guard/memory_watchdog.sh
 3. Read the log:
 
 ```bash
-tail -5 ~/Library/Logs/freeze_guard/memory_watchdog_stdout.log
+tail -5 ~/Library/Logs/freeze_guard/watchdog_stdout.log
 ```
 
 4. Pass/fail: if the file contains a line with a timestamp and either `pCloud OK` or a restart event, the setup is working. If the file is empty or does not exist, the log path is misconfigured — re-run setup.sh.
@@ -144,7 +149,9 @@ tail -5 ~/Library/Logs/freeze_guard/memory_watchdog_stdout.log
 
 | Agent | Trigger | Script | Log |
 |---|---|---|---|
-| `memory_watchdog` | Every 15 min | `~/Library/Scripts/freeze_guard/memory_watchdog.sh` | `~/Library/Logs/freeze_guard/memory_watchdog_stdout.log` |
-| `nightly_refresh` | 04:20 daily | `~/Library/Scripts/freeze_guard/nightly_refresh.sh` | `~/Library/Logs/freeze_guard/nightly_refresh_stdout.log` |
+| `memory_watchdog` | Every 15 min | `~/Library/Scripts/freeze_guard/memory_watchdog.sh` | `~/Library/Logs/freeze_guard/watchdog_stdout.log` |
+| `memory_pressure_watchdog` | Every 5 min | `~/Library/Scripts/freeze_guard/memory_pressure_watchdog.sh` | `~/Library/Logs/freeze_guard/pressure_stdout.log` |
+| `nightly_refresh` | 04:20 daily | `~/Library/Scripts/freeze_guard/nightly_refresh.sh` | `~/Library/Logs/freeze_guard/nightly_stdout.log` |
+| `weekly_reboot` | Sunday 03:00 | `~/Library/Scripts/freeze_guard/weekly_reboot.sh` | `~/Library/Logs/freeze_guard/reboot_stdout.log` |
 
 launchd stdout/stderr → `~/Library/Logs/freeze_guard/`
